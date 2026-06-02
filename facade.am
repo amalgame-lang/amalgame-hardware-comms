@@ -1,0 +1,94 @@
+namespace Amalgame.Hardware.Comms
+
+// ── Amalgame.Hardware.Comms — serial comms drivers ────────
+//
+// Talk to serial peripherals over the Amalgame.Hal SerialPort: GPS
+// receivers, modems, other MCUs. Portable — give the driver any
+// SerialPort (the Raspberry Pi backend's Uart, or a future MCU's).
+//
+//     import Amalgame.Hardware          // Uart (Pi backend)
+//     import Amalgame.Hardware.Comms
+//
+//     let gps = new Gps(new Uart("/dev/serial0", 9600))
+//     // in a loop:
+//     gps.Update()
+//     if (gps.HasFix()) {
+//         Console.WriteLine(String_FromFloat(gps.Latitude()) + ", " +
+//                           String_FromFloat(gps.Longitude()))
+//     }
+
+import Amalgame.Hal
+
+// NMEA-0183 GPS parser. Reads $GPGGA / $GNGGA fix sentences off a
+// SerialPort and exposes the last fix (lat/lon in decimal degrees,
+// altitude in metres, satellite count). Call Update() regularly.
+public class Gps {
+    private port: SerialPort
+    private buf:  string
+    private lat:  float
+    private lon:  float
+    private alt:  float
+    private sats: int
+    private fix:  int
+
+    public Gps(port: SerialPort) {
+        this.port = port
+        this.buf  = ""
+        this.lat  = 0.0
+        this.lon  = 0.0
+        this.alt  = 0.0
+        this.sats = 0
+        this.fix  = 0
+    }
+
+    public float Latitude()   { return this.lat }
+    public float Longitude()  { return this.lon }
+    public float Altitude()   { return this.alt }
+    public int   Satellites() { return this.sats }
+    public bool  HasFix()     { return this.fix > 0 }
+
+    // Drain available serial data and parse any complete sentences.
+    public void Update() {
+        let chunk: string = this.port.ReadString(256)
+        if (String_Length(chunk) == 0) { return }
+        this.buf = this.buf + chunk
+        let lines: List<string> = String_Split(this.buf, "\n")
+        let n: int = lines.Count()
+        var i: int = 0
+        while (i < n - 1) {
+            this.ParseSentence(lines.Get(i))
+            i = i + 1
+        }
+        // keep the (possibly incomplete) last fragment
+        if (n > 0) { this.buf = lines.Get(n - 1) }
+        if (String_Length(this.buf) > 512) { this.buf = "" }
+    }
+
+    // Parse a single line; only GGA fix sentences are used.
+    public void ParseSentence(line: string) {
+        if (!String_Contains(line, "GGA")) { return }
+        let f: List<string> = String_Split(line, ",")
+        if (f.Count() < 10) { return }
+        let latS: string = f.Get(2)
+        let lonS: string = f.Get(4)
+        let fixS: string = f.Get(6)
+        if (String_Length(latS) == 0 || String_Length(lonS) == 0) { return }
+        this.lat  = this.NmeaToDeg(latS, 2, f.Get(3))
+        this.lon  = this.NmeaToDeg(lonS, 3, f.Get(5))
+        if (String_Length(fixS) > 0) { this.fix = String_ToInt(fixS) }
+        let satS: string = f.Get(7)
+        if (String_Length(satS) > 0) { this.sats = String_ToInt(satS) }
+        let altS: string = f.Get(9)
+        if (String_Length(altS) > 0) { this.alt = String_ToFloat(altS) }
+    }
+
+    // ddmm.mmmm (degDigits=2 for lat, 3 for lon) + hemisphere → degrees.
+    private float NmeaToDeg(field: string, degDigits: int, hemi: string) {
+        if (String_Length(field) <= degDigits) { return 0.0 }
+        let degS: string = String_Substring(field, 0, degDigits)
+        let minS: string = String_Substring(field, degDigits, String_Length(field) - degDigits)
+        var d: float = String_ToFloat(degS) + String_ToFloat(minS) / 60.0
+        if (hemi == "S" || hemi == "W") { d = 0.0 - d }
+        return d
+    }
+}

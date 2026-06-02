@@ -1,0 +1,35 @@
+namespace Tests
+
+import Amalgame.Hal
+import Amalgame.Hardware.Comms
+
+// Fake serial that emits one canned GGA sentence, then nothing.
+public class FakeSerial implements SerialPort {
+    private sent: int
+    public FakeSerial() { this.sent = 0 }
+    public bool WriteString(s: string) { return true }
+    public bool WriteBytes(data: List<int>) { return true }
+    public List<int> ReadBytes(max: int) { let l: List<int> = new List<int>(); return l }
+    public string ReadString(max: int) {
+        if (this.sent == 1) { return "" }
+        this.sent = 1
+        return "$GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47\r\n"
+    }
+}
+
+public class Program {
+    public static void Main(string[] args) {
+        var fail: int = 0
+        let gps: Gps = new Gps(new FakeSerial())
+        gps.Update()
+
+        if (gps.HasFix()) { Console.WriteLine("[PASS] gps fix") } else { Console.WriteLine("[FAIL] gps fix"); fail = fail + 1 }
+        if (gps.Satellites() == 8) { Console.WriteLine("[PASS] gps sats=8") } else { Console.WriteLine("[FAIL] gps sats=" + String_FromInt(gps.Satellites())); fail = fail + 1 }
+        // 4807.038 N → 48 + 7.038/60 = 48.1173°
+        if (gps.Latitude() > 48.0 && gps.Latitude() < 48.2) { Console.WriteLine("[PASS] gps lat ~48.12") } else { Console.WriteLine("[FAIL] gps lat " + String_FromFloat(gps.Latitude())); fail = fail + 1 }
+        // 01131.000 E → 11 + 31/60 = 11.5167°
+        if (gps.Longitude() > 11.4 && gps.Longitude() < 11.6) { Console.WriteLine("[PASS] gps lon ~11.52") } else { Console.WriteLine("[FAIL] gps lon " + String_FromFloat(gps.Longitude())); fail = fail + 1 }
+
+        if (fail == 0) { Console.WriteLine("comms: all good") }
+    }
+}

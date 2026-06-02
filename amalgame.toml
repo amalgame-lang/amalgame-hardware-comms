@@ -1,0 +1,25 @@
+# Package manifest — amalgame-hardware-comms
+#
+# Serial-comms drivers over the Amalgame.Hal SerialPort interface: one
+# driver, runs on Raspberry Pi (amalgame-hardware-gpio Uart) and future
+# MCU backends.
+#
+#   Gps  — NMEA-0183 GPS parser (lat/lon/alt/sats from GGA sentences)
+
+[package]
+name              = "amalgame-hardware-comms"
+version           = "0.1.0"
+license           = "Apache-2.0"
+description       = "Portable serial-comms drivers (NMEA GPS) over Amalgame.Hal SerialPort — one driver, runs on Raspberry Pi and future MCU backends. For trackers, drones, loggers."
+authors           = ["Bastien Mouget"]
+required-amalgame = ">=0.8.72"
+schema-version    = 1
+
+[stdlib]
+classes   = ["Gps"]
+header    = "facade-stub.h"
+namespace = "Amalgame.Hardware.Comms"
+facade    = "facade.am"
+
+[dependencies]
+amalgame-hal = ">=0.2.0"
